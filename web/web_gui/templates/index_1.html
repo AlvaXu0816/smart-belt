@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>学生心率实时监控</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; }
+        table { border-collapse: collapse; width: 800px; margin: 20px auto; }
+        th, td { border: 1px solid #ccc; padding: 12px 24px; text-align: center; font-size: 26px; }
+        th { background: #f6f6f6; }
+        .controls { text-align: center; margin-bottom: 30px; }
+        .controls button { margin: 0 30px; padding: 14px 36px; font-size: 32px; border-radius: 6px; }
+        .timer { font-size: 48px; margin-bottom: 16px; text-align: center; font-weight: bold; }
+        h2 { text-align:center; font-size: 48px; margin-top: 36px; }
+        .row-btn { font-size: 18px; padding: 6px 18px; }
+    </style>
+</head>
+<body>
+    <h2>学生心率实时监控</h2>
+    <div class="timer" id="timer">计时: 00:00</div>
+    <div class="controls">
+        <button onclick="timerControl('start')">开始计时</button>
+        <button onclick="timerControl('pause')">暂停计时</button>
+        <button onclick="timerControl('reset')">重置所有</button>
+    </div>
+    <table id="hrTable">
+        <thead>
+            <tr>
+                <th>UID</th>
+                <th>HR</th>
+                <th>TIME</th>
+                <th>暂停</th>
+                <th>重置</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <script>
+        const socket = io();
+        const table = document.getElementById('hrTable').querySelector('tbody');
+        const uidRowMap = {};
+        let currentTimer = 0;
+
+        function sec2str(sec) {
+            let m = Math.floor(sec / 60);
+            let s = sec % 60;
+            return (m<10?'0':'')+m+':' + (s<10?'0':'')+s;
+        }
+
+        socket.on('update', function(data){
+            let {uid, hr} = data;
+            if(uidRowMap[uid]){
+                uidRowMap[uid].cells[1].textContent = hr;
+            }else{
+                let row = table.insertRow();
+                row.insertCell(0).textContent = uid;
+                row.insertCell(1).textContent = hr;
+                row.insertCell(2).textContent = sec2str(currentTimer);
+                // Pause 按钮
+                let pauseBtn = document.createElement('button');
+                pauseBtn.textContent = 'Pause';
+                pauseBtn.className = 'row-btn';
+                pauseBtn.onclick = () => timerControl('pause');
+                row.insertCell(3).appendChild(pauseBtn);
+                // Reset 按钮
+                let resetBtn = document.createElement('button');
+                resetBtn.textContent = 'Reset';
+                resetBtn.className = 'row-btn';
+                resetBtn.onclick = () => timerControl('reset');
+                row.insertCell(4).appendChild(resetBtn);
+
+                uidRowMap[uid] = row;
+            }
+        });
+
+        socket.on('reset', function(){
+            // 清空表格
+            for(let key in uidRowMap) table.deleteRow(uidRowMap[key].rowIndex-1);
+            for(let key in uidRowMap) delete uidRowMap[key];
+        });
+
+        socket.on('timer', function(data){
+            currentTimer = data.seconds;
+            document.getElementById('timer').textContent = '计时: ' + sec2str(currentTimer);
+            // 全表TIME列同步
+            for(let key in uidRowMap){
+                uidRowMap[key].cells[2].textContent = sec2str(currentTimer);
+            }
+        });
+
+        function timerControl(action) {
+            socket.emit('timer_control', {action: action});
+        }
+    </script>
+</body>
+</html>
